@@ -1,8 +1,10 @@
 ---
-Status: Active
+Status: Deprecated
 Owner: HyperFleet Platform Team
-Last Updated: 2025-11-05
+Last Updated: 2026-04-21
 ---
+
+> **Note:** This document reflects the MVP testing strategy using Prow. Container image builds have since moved to Konflux — see [Konflux Release Pipeline Design](../konflux-release-pipeline-design.md). The E2E testing approach described here remains valid as Prow retains E2E testing.
 
 ## Table of Contents
 
