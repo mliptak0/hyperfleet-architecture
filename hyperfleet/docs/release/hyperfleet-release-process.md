@@ -362,8 +362,8 @@ git push origin v1.5.0
 - [ ] Monitor nightly Prow E2E jobs on `release-X.Y` branch (runs until EOL at 6 months)
 - [ ] Investigate and address any nightly test failures to detect regressions early
 - [ ] Track bugs for potential patch releases
-- [ ] Blocker/Critical CVE → Hotfix within 24 hours (see [Hotfix Workflow](#54-hotfix-workflow-post-ga))
-- [ ] All other bugs → Patch within 48 hours, or defer to next release
+- [ ] Blocker/Critical CVE → Hotfix within 1 working day (see [Hotfix Workflow](#54-hotfix-workflow-post-ga))
+- [ ] All other bugs → Patch within 2 working days, or defer to next release
 - [ ] Disable nightly jobs when release reaches EOL
 
 #### Stakeholder Communication if required
@@ -391,8 +391,8 @@ When urgent release needed outside regular cadence:
 - [ ] Follow condensed testing plan (unit, integration, E2E for affected components)
 - [ ] Cut RC and validate
 - [ ] Tag GA release
-- [ ] Notify stakeholders 48 hours in advance minimum
-- [ ] Monitor post-release for 24 hours
+- [ ] Notify stakeholders 2 working days in advance minimum
+- [ ] Monitor post-release for 1 working day
 
 ---
 
@@ -430,9 +430,9 @@ git push origin vX.Y.Z
 - [ ] Deploy hotfix
 
 #### Timeline
-- [ ] **Blocker/Critical CVE**: Patch within 24 hours
+- [ ] **Blocker/Critical CVE**: Patch within 1 working day
 
-Non-critical issues do not use the emergency hotfix process — they follow the standard patch release workflow (48 hours) or are deferred to the next release.
+Non-critical issues do not use the emergency hotfix process — they follow the standard patch release workflow (2 working days) or are deferred to the next release.
 
 #### Stakeholder Communication
 - [ ] **Slack**: Immediate notification of critical issue
@@ -1024,7 +1024,7 @@ When a bug is discovered after code freeze (during RC testing or late in release
    - Developer and Release Owner verify both PRs merged
 4. **New RC:** Cut new release candidate (e.g., v1.5.0-rc3)
 5. **Regression Testing:** Full test suite re-run
-6. **Time Box:** If fix takes > 24 hours, consider release delay or degrading severity
+6. **Time Box:** If fix takes > 1 working day, consider release delay or degrading severity
 
 **For Major bugs:**
 1. **Before Code Freeze:** Major severity bugs must be fixed before GA release
@@ -1089,9 +1089,9 @@ git push origin v1.4.3
 ```
 
 **Hotfix Release Timeline:**
-- Blocker/Critical CVE: Patch release within 24 hours
+- Blocker/Critical CVE: Patch release within 1 working day
 
-Non-critical issues do not use the hotfix process — they follow the standard patch release workflow (48 hours) or are deferred to the next release.
+Non-critical issues do not use the hotfix process — they follow the standard patch release workflow (2 working days) or are deferred to the next release.
 
 ### 5.5 Release Recovery Strategy
 
@@ -1109,8 +1109,8 @@ When issues are discovered in a GA release, the default recovery path is to **fi
 5. Verify cherry-pick completion (both developer and Release Owner)
 
 **Timeline:**
-- Blocker/Critical CVE: Patch release within 24 hours
-- All other issues: Patch release within 48 hours, or defer to next release
+- Blocker/Critical CVE: Patch release within 1 working day
+- All other issues: Patch release within 2 working days, or defer to next release
 
 **Advantages:**
 - Simpler testing scope (only test the fix)
@@ -1492,7 +1492,7 @@ After completing the first few releases with manual processes, conduct retrospec
 Konflux onboarding is tracked under [HYPERFLEET-830](https://redhat.atlassian.net/browse/HYPERFLEET-830). The pipeline design is documented in [Konflux Release Pipeline Design](./konflux-release-pipeline-design.md) and [ADR 0014](../../adrs/0014-konflux-build-and-release.md).
 
 **Remaining steps:**
-- Create `hyperfleet` tenant workspace on stone-prd-rh01
+- Create `hyperfleet` tenant workspace on kflux-prd-rh02
 - Create RPA and constraint files in `konflux-release-data`
 - Add `.tekton/` pipeline definitions to each component repo
 - Update nightly Prow E2E to pull from Quay
@@ -1522,7 +1522,7 @@ Based on retrospective findings and Konflux capabilities:
 **Quality Metrics:**
 - Bug escape rate (bugs found post-GA per component and per HyperFleet Release)
 - Hotfix frequency per component (target: < 2 patch releases per component between HyperFleet Releases)
-- Mean time to patch critical vulnerabilities (target: < 48 hours for any component)
+- Mean time to patch critical vulnerabilities (target: < 2 working days for any component)
 - Cross-component compatibility issues found in production (target: 0)
 
 ---
@@ -1640,7 +1640,7 @@ What testing will be deferred to next regular release?
 
 ### If Issues Discovered
 - [ ] Hotfix patch release plan documented
-- [ ] Fix timeline estimated (target: < 48 hours for critical)
+- [ ] Fix timeline estimated (target: < 2 working days for critical)
 - [ ] Workaround available for users (if applicable)
 
 ### Database Migration Considerations
@@ -1649,7 +1649,7 @@ What testing will be deferred to next regular release?
 ## Stakeholder Coordination
 
 ### Offering Team Notification
-- [ ] Offering team notified (minimum 48 hours advance)
+- [ ] Offering team notified (minimum 2 working days advance)
 - [ ] Integration testing with GCP completed
 - [ ] Deployment coordination confirmed
 
@@ -1682,7 +1682,7 @@ What testing will be deferred to next regular release?
 | 5 | YYYY-MM-DD | GA release + deployment | @release-owner |
 
 ## Post-Release Monitoring
-- [ ] Metrics dashboard monitored for 24 hours
+- [ ] Metrics dashboard monitored for 1 working day
 - [ ] No error rate increase
 - [ ] No performance degradation
 - [ ] Post-release review completed

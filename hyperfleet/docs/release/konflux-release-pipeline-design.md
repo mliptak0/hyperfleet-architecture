@@ -104,7 +104,7 @@ flowchart TB
 | Component | Location | Owner |
 |-----------|----------|-------|
 | PaC pipeline definitions (`.tekton/`) | Component repos (hyperfleet-api, sentinel, adapter) | HyperFleet team |
-| PaC controller | Konflux cluster (stone-prd-rh01) | Konflux platform team |
+| PaC controller | Konflux cluster (kflux-prd-rh02) | Konflux platform team |
 | Tekton Chains (signing) | Konflux cluster | Konflux platform team |
 | RPA (registry mapping, tags, policy) | `konflux-release-data` repo | HyperFleet team |
 | Enterprise Contract policy selection | `konflux-release-data` repo (RPA references policy) | HyperFleet team |
@@ -191,16 +191,16 @@ Post-Release:
 
 ### Hotfix Process
 
-Hotfixes target 24-hour turnaround for Blocker/Critical issues. Patches skip the RC cycle.
+Hotfixes target 1 working day turnaround for Blocker/Critical issues. Patches skip the RC cycle.
 
-| Aspect | Full Release (Week 3) | Hotfix (24 hours) |
+| Aspect | Full Release (Week 3) | Hotfix (1 working day) |
 |--------|----------------------|-------------------|
 | Scope | All components, all features | Single fix, single component |
 | RC cycle | RC1 -> E2E -> fix -> RC2 -> ... | No RC — straight to patch tag |
 | E2E testing | Full tier0 + tier1 | Focused smoke test |
 | Approvals | Release readiness review | Code review + Release Owner |
 | Konflux builds | Multiple (per RC) | One (affected component only) |
-| Timeline | 5 working days | 24 hours |
+| Timeline | 5 working days | 1 working day |
 
 **Hotfix flow:**
 
@@ -215,8 +215,8 @@ Fix on main → cherry-pick to release branch → push patch tag (v1.5.1)
 
 | Severity | Target | Process |
 |----------|--------|---------|
-| Blocker / Critical CVE | 24 hours | Full hotfix process. Developer assigned immediately. |
-| All other issues | 48 hours | Patch within 48 hours, or defer to next release. |
+| Blocker / Critical CVE | 1 working day | Full hotfix process. Developer assigned immediately. |
+| All other issues | 2 working days | Patch within 2 working days, or defer to next release. |
 
 ---
 
@@ -317,14 +317,14 @@ When any Component builds, the resulting Snapshot contains images for ALL Compon
 
 The RPA configuration lives in `konflux-release-data` as the source of truth. Refer to the actual config files for current YAML:
 
-- **RPA:** `config/stone-prd-rh01.pg1f.p1/service/ReleasePlanAdmission/hyperfleet/`
+- **RPA:** `config/kflux-prd-rh02.0fk9.p1/service/ReleasePlanAdmission/hyperfleet/`
 - **Constraint:** `constraints/service/hyperfleet.yaml`
 
 **Design rationale:**
 
 - **Single RPA** listing all three components. One RPA, one tag template, three distinct outcomes driven by `{{ labels.version }}`.
 - **Auto-release** (`block-releases: false`). `block-releases` is per-RPA, not per-Snapshot — every Snapshot from the Application matches every RPA. A gated RPA would block every nightly and RC build, creating hundreds of blocked releases never intended to be unblocked. The tag push IS the gate.
-- **Release pipeline:** `rh-push-to-external-registry`. Pushes to Quay, registers in Pyxis (vulnerability scanning), and sends Slack notifications. Every non-Konflux service team on stone-prd-rh01 uses this pipeline.
+- **Release pipeline:** `rh-push-to-external-registry`. Pushes to Quay, registers in Pyxis (vulnerability scanning), and sends Slack notifications. Every non-Konflux service team on kflux-prd-rh02 uses this pipeline.
 - **Tag templates** using `{{ labels.version }}`, `{{ labels.version }}-{{ timestamp }}`, `{{ git_sha }}`, and `latest`.
 
 ### Image Tags Per Build Context
@@ -457,7 +457,7 @@ The Release Owner updates the manifest manually before tagging `hyperfleet-relea
 | Separate RPAs per build context | One auto-release RPA for nightly + one gated for releases. `block-releases` is per-RPA not per-Snapshot, so every build creates blocked releases — noise without safety. |
 | Glob patterns for tag matching | PaC globs cannot distinguish `v1.0.0-rc1` from `v1.0.0`. No negative matching. CEL with regex anchoring is required. |
 | Migrate E2E to Konflux | Prow already has GKE clusters, GCP credentials, the test framework, and the deploy scripts. Migration cost is not justified. |
-| Shared RC version across all components | Retagging all three components at the same RC version when only one has a fix. Wastes build time and conflates unchanged components with the fix. Independent versioning with `RELEASE_MANIFEST.yaml` tracking the combination is cleaner. |
+| Single shared RC version across all components | Tagging all three components with the same RC version when only one has a fix. Rejected because it wastes build time, conflates unchanged components with the fix, and makes it harder to track which component actually changed. The chosen model is independent per-component RC versioning: only the affected component gets a new RC tag, and `RELEASE_MANIFEST.yaml` tracks the tested combination. |
 
 ---
 
