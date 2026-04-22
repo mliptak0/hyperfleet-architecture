@@ -141,7 +141,7 @@ resources:
 | Field | Required | Type | Default | Description |
 |-------|----------|------|---------|-------------|
 | `lifecycle.delete.propagationPolicy` | NO | string | `Background` | Kubernetes propagation policy: `Background`, `Foreground`, or `Orphan` |
-| `lifecycle.delete.when.expression` | NO | string (CEL) | `false` | CEL expression evaluated each reconciliation loop. Resource is deleted only when expression evaluates to `true`. |
+| `lifecycle.delete.when.expression` | **YES** | string (CEL) | — | CEL expression evaluated each reconciliation loop. Resource is deleted only when expression evaluates to `true`. Required when `lifecycle.delete` is configured — the adapter validator rejects configs where it is absent. |
 
 - Evaluated after parameter extraction and preconditions (needs captured variables)
 - When `lifecycle.delete.when.expression` is `true`: executor discovers and deletes the resource
@@ -151,10 +151,12 @@ resources:
 **Important**: `lifecycle.delete.when.expression` should be driven by `deleted_time`, not derived status fields. `deleted_time` is the canonical deletion trigger. Ordering conditions (e.g., `!resources.?clusterJob.hasValue()`) are combined with the deletion trigger in a single expression.
 
 ```yaml
-# Precondition captures deletion timestamp for lifecycle expressions
+# Capture is_deleting using the named-map-variable approach — no separate deleted_time capture needed.
+# has(preconditionName.deleted_time) returns false cleanly when the field is absent (non-deleting case)
+# without logging a WARN on every reconciliation.
 capture:
-  - name: deleted_time
-    field: deleted_time
+  - name: is_deleting
+    expression: "has(checkClusterState.deleted_time)"
 ```
 
 **Evaluation order in the executor:**
@@ -457,10 +459,8 @@ preconditions:
       url: /clusters/{{ .clusterId }}
       timeout: 10s
     capture:
-      - name: deleted_time
-        field: deleted_time
       - name: is_deleting
-        expression: "deleted_time != null"
+        expression: "has(clusterStatus.deleted_time)"
       - name: clusterName
         field: name
       - name: generation
@@ -851,7 +851,7 @@ The following field must be added to the adapter framework's `AdapterTaskConfig`
 
 The field is optional with backward-compatible defaults:
 - `lifecycle` not set → apply-only behavior (existing adapters unchanged)
-- `lifecycle.delete.when` not set → defaults to `false`
+- `lifecycle.delete.when.expression` → **required** when `lifecycle.delete` is configured; the adapter validator rejects configs where it is absent
 - `lifecycle.delete.propagationPolicy` not set → defaults to `Background`
 
 ### Status Contract Change
