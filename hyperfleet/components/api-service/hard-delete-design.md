@@ -8,6 +8,15 @@ Last Updated: 2026-04-23
 
 **Jira**: [HYPERFLEET-904](https://redhat.atlassian.net/browse/HYPERFLEET-904)
 
+## Terminology
+
+| Term | Definition |
+|------|-----------|
+| **Soft Deletion** | Setting `deleted_time` (and `deleted_by`) on a resource to signal deletion intent. The resource remains in the database while adapters clean up Kubernetes resources. API resources in this state are pending for deletion. |
+| **Hard Delete** | Permanently removing resource, subresource, and adapter status rows from the database. The data is gone and cannot be recovered. Triggered when `deleted_time` is set and `Reconciled=True`. |
+
+> See [Adapter Deletion Flow Design § Terminology](../adapter/framework/adapter-deletion-flow-design.md#terminology) for the full terminology table including soft-delete disambiguation.
+
 ## What & Why
 
 **What**: Define how the API hard-deletes database records (clusters, nodepools, adapter_statuses) after adapter reconciliation confirms cleanup is complete.
@@ -54,7 +63,7 @@ When the API receives `POST /clusters/{id}/adapter_statuses` with `Finalized=Tru
 3. If nodepools still exist: `Reconciled` stays `False` even though all cluster adapters report `Finalized=True`
 4. Only when both checks pass does the service layer compute `Reconciled=True` and execute the hard-delete within the same transaction
 
-Sentinel sees `Reconciled=False`, re-triggers the event, and cluster adapters report `Finalized=True` again idempotently. Once all nodepools are hard-deleted, the next status update computes `Reconciled=True` and hard-deletes the cluster.
+Sentinel sees `Reconciled=False`, re-triggers the event, and cluster adapters report `Finalized=True` again idempotently. Once all nodepools are hard-deleted, the next status update computes `Reconciled=True` and hard-deletes the cluster and its associated adapter statuses.
 
 ### Database Safety Net (ON DELETE RESTRICT)
 

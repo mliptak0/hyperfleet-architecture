@@ -8,6 +8,8 @@ Last Updated: 2026-04-23
 
 ## Context
 
+HyperFleet API resources (clusters, nodepools...) are the source of truth for Sentinel and adapters. When a user deletes a resource, the API sets `deleted_time` to signal deletion intent — this is **soft deletion**. The resource stays in the database while adapters clean up the Kubernetes infrastructure they created. The [Adapter Deletion Flow Design](../components/adapter/framework/adapter-deletion-flow-design.md) covers this phase. Once adapters confirm cleanup is complete, the API resource and its associated records must be permanently removed from the database — this is **hard deletion**, and what this ADR decides.
+
 **The ownership question:** A cluster can have multiple required adapters. A single adapter only knows about its own resources, not whether sibling adapters have finished. No individual adapter can own hard-delete.
 
 **The race condition:** When a cluster with 500+ nodepools is deleted, cluster adapters may finalize instantly while nodepool adapters take minutes per nodepool. Without ordering enforcement, the cluster would be hard-deleted while nodepools remain orphaned with real infrastructure still running.
