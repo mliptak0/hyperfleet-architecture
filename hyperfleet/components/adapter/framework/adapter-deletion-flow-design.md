@@ -46,7 +46,7 @@ Last Updated: 2026-04-12
 ### Out of Scope
 
 - **Force deletion** — behavior and approach (e.g., immediate hard delete, graceful escalation, manual intervention) requires a separate spike; depends on peer team requirements
-- **API hard-deletion mechanism** — the actor and pattern for hard-deleting DB records (inline, background job, customer-triggered, retention window) is covered by [HYPERFLEET-904](https://redhat.atlassian.net/browse/HYPERFLEET-904)
+- **API hard-deletion mechanism** — the actor and pattern for hard-deleting DB records (inline, background job, customer-triggered, retention window) is covered by [HYPERFLEET-904](https://redhat.atlassian.net/browse/HYPERFLEET-904) — see [Hard-Delete Design](../../api-service/hard-delete-design.md)
 - Cleanup job support (run a job before deleting resources) — future enhancement
 - Per-resource deletion retry — Sentinel reconciliation loop re-triggers the full adapter; fine-grained per-resource retry is a future enhancement
 - Deletion cancellation — not supported in 1.0.0
@@ -403,7 +403,7 @@ The hard-delete gate is always: `deleted_time` set + `Reconciled=True`. Optional
 
 ### API Hard-Delete Signal
 
-This section defines **when** hard deletion happens (the gate conditions). **How** the API performs hard deletion (the actor, retention window, failure handling) is a separate concern covered by [HYPERFLEET-904](https://redhat.atlassian.net/browse/HYPERFLEET-904).
+This section defines **when** hard deletion happens (the gate conditions). **How** the API performs hard deletion (the actor, retention window, failure handling) is a separate concern covered by [Hard-Delete Design](../../api-service/hard-delete-design.md) ([HYPERFLEET-904](https://redhat.atlassian.net/browse/HYPERFLEET-904)).
 
 The API hard-deletes records hierarchically — subresources first, then the resource.
 
@@ -888,6 +888,6 @@ Existing adapters continue to work unchanged during rollout — deletion support
 - [HYPERFLEET-560](https://issues.redhat.com/browse/HYPERFLEET-560) - SPIKE: Design deletion flow between API and Adapters
 - [HYPERFLEET-543](https://issues.redhat.com/browse/HYPERFLEET-543) - Implement Cluster DELETE endpoint with cascade cleanup
 - [HYPERFLEET-544](https://issues.redhat.com/browse/HYPERFLEET-544) - Implement NodePool DELETE endpoint
-- [HYPERFLEET-904](https://redhat.atlassian.net/browse/HYPERFLEET-904) - SPIKE: Design API hard-deletion mechanism
+- [HYPERFLEET-904](https://redhat.atlassian.net/browse/HYPERFLEET-904) - SPIKE: Design API hard-deletion mechanism — see [Hard-Delete Design](../../api-service/hard-delete-design.md)
 - [Maestro Resource Deletion](https://github.com/openshift-online/maestro) - Two-phase deletion pattern reference
 - [Kubernetes Deletion](https://kubernetes.io/docs/concepts/architecture/garbage-collection/) - Kubernetes garbage collection and propagation policies

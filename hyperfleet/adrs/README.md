@@ -86,5 +86,5 @@ What did we decide? State it plainly.
 | [0008](0008-dynamic-status-aggregation.md) | Dynamic Status Aggregation (Compute on Write) | Active | 2026-04-16 |
 | [0009](0009-uuid-v7-resource-identifiers.md) | UUID v7 for Cluster and NodePool Identifiers | Active | 2026-04-15 |
 | [0010](0010-jsonb-provider-agnostic-spec.md) | JSONB for Provider-Agnostic Cluster and NodePool Spec Storage | Active | 2026-04-15 |
-| [0011](0011-two-phase-deletion-flow.md) | Two-Phase Deletion (Soft-Delete + Adapter Cleanup + Hard-Delete) | Active | 2026-04-15 |
-| [0012](0012-testcontainers-for-integration-tests.md) | Testcontainers for Integration Tests | Active | 2026-04-16 |
+| [0011](0011-testcontainers-for-integration-tests.md) | Testcontainers for Integration Tests | Active | 2026-04-16 |
+| [0012](0012-hard-delete-mechanism-after-adapter-reconciliation.md) | Hard-Delete Ownership and Execution | Proposed | 2026-04-23 |
