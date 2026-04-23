@@ -14,8 +14,6 @@ HyperFleet API resources (clusters, nodepools...) are the source of truth for Se
 
 **The race condition:** When a cluster with 500+ nodepools is deleted, cluster adapters may finalize instantly while nodepool adapters take minutes per nodepool. Without ordering enforcement, the cluster would be hard-deleted while nodepools remain orphaned with real infrastructure still running.
 
-> Related: [Adapter Deletion Flow Design](../components/adapter/framework/adapter-deletion-flow-design.md)
-
 ## Decision
 
 The **API hard-deletes DB records within the same `POST /adapter_statuses` request** that computes `Reconciled=True`. No new endpoint or component is introduced. The API is the natural owner because it receives every adapter status report, aggregates conditions to compute `Reconciled`, and can hard-delete atomically within the same database transaction.
@@ -38,8 +36,3 @@ The **service layer enforces bottom-up ordering**: a cluster cannot reach `Recon
 | **Sentinel triggers hard-delete** | Sentinel is read-only by design — it polls the API and publishes CloudEvents. Adding mutation capabilities (calling DELETE endpoints) changes Sentinel's role from observer to actor, breaking single-responsibility. Additionally, having Sentinel watch the API just to call an API endpoint adds indirection without adding information — the API already knows when `Reconciled=True` because it computed it. |
 | **Retention window + CronJob (viable, deferred)** | Keep records in DB for a configurable period after `Reconciled=True`, then hard-delete via background CronJob. Deferred because no formal investigation requirement exists — peer team interest (office hours) was a nice-to-have, not formalized with acceptance criteria. Teams can build must-gather adapters for retention without changes to the deletion mechanism. The single-request approach evolves to this by swapping DELETE for `SET reconciled_at` statement. |
 | **Sentinel-level audit event stream** | Publishes audit events from Sentinel to a dedicated broker topic on state changes. Addresses observability (programmatic event access for dashboards/workflows), not hard-delete execution. Documented as future evolution path — additive enhancement that doesn't require undoing hard-delete in single request. |
-
-## Related
-
-- [Hard-Delete Design](../components/api-service/hard-delete-design.md) — implementation details, sequence diagrams, failure handling
-- [Adapter Deletion Flow Design](../components/adapter/framework/adapter-deletion-flow-design.md) — adapter-side cleanup and status reporting
