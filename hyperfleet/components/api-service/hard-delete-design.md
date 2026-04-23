@@ -38,9 +38,7 @@ Last Updated: 2026-04-23
 
 ### Out of Scope
 
-- **Pending deletion** (setting `deleted_time`, cascading to subresources) — covered by [Adapter Deletion Flow Design](../adapter/framework/adapter-deletion-flow-design.md)
 - **Force deletion** — requires a separate spike; depends on peer team requirements
-- **Retention window + CronJob** — viable but deferred; see [ADR 0012 Alternatives](../../adrs/0012-hard-delete-mechanism-after-adapter-reconciliation.md#alternatives-considered)
 
 ---
 
@@ -169,40 +167,9 @@ Deletion observability is tracked by [HYPERFLEET-856](https://redhat.atlassian.n
 
 ---
 
-## Trade-offs
-
-### What We Gain
-
-- Small implementation scope (few lines in API status path)
-- Atomic transaction prevents partial-deletes
-- Service-layer check prevents race condition by verifying nodepools are gone
-- Clean database at scale (critical at 500+ nodepools)
-- No new infrastructure or components
-- Natural retry via Sentinel polling
-- Consistent with Kubernetes finalizer semantics
-
-### What We Lose / What Gets Harder
-
-- No `GET` after hard-delete — investigation requires log tooling
-- Premature `Finalized=True` from adapter bug = permanent data loss (mitigated by Health guard in post-processing that prevents `Finalized=True` when executor didn't complete successfully, and adapters reporting `Finalized=False` with reason `AdapterUnhealthy` when cleanup cannot be confirmed — see [Adapter Deletion Flow Design § Deletion Error Reporting](../adapter/framework/adapter-deletion-flow-design.md#deletion-error-reporting-11))
-- For large clusters, adapter re-reporting generates load proportional to Sentinel polling frequency × nodepool cleanup duration
-
-### Acceptable Because
-
-- Race condition protection outweighs investigation inconvenience
-- Adapter Health guard mitigates premature finalization
-- Future event streaming for audits can be added without changing this mechanism
-- The single-request approach evolves to a retention window by swapping `DELETE` for `SET reconciled_at` — no API contract changes required
-
----
-
-## Alternatives Considered
-
-See [ADR 0012 — Alternatives Considered](../../adrs/0012-hard-delete-mechanism-after-adapter-reconciliation.md#alternatives-considered) for the full analysis. Four alternatives were evaluated: adapter-triggered delete, Sentinel-triggered delete, retention window + CronJob (viable, deferred), and Sentinel audit event stream (future evolution).
-
----
-
 ## References
+
+For trade-offs and alternatives considered, see [ADR 0012](../../adrs/0012-hard-delete-mechanism-after-adapter-reconciliation.md).
 
 - [ADR 0012 — Hard-Delete Ownership and Execution](../../adrs/0012-hard-delete-mechanism-after-adapter-reconciliation.md)
 - [Adapter Deletion Flow Design](../adapter/framework/adapter-deletion-flow-design.md)
