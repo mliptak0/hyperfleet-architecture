@@ -63,6 +63,39 @@ sequenceDiagram
 
 </details>
 
+<details>
+<summary>Atomic transaction failure and retry (click to expand)</summary>
+
+```mermaid
+sequenceDiagram
+    participant CLAdapter as Cluster Adapter
+    participant API
+    participant DB
+
+    CLAdapter->>API: POST /clusters/{id}/adapter_statuses (Finalized=True)
+    API->>DB: BEGIN TRANSACTION
+    API->>DB: Store cluster adapter conditions
+    API->>DB: Compute Reconciled=True (no nodepools remain)
+    API->>DB: DELETE cluster record and adapter_statuses
+    
+    alt Transaction succeeds
+        DB-->>API: COMMIT successful
+        API-->>CLAdapter: 200 OK
+        Note over DB: Cluster hard-deleted
+    else Transaction fails (constraint violation, connection loss, disk full)
+        DB-->>API: ROLLBACK
+        API-->>CLAdapter: 500 Internal Server Error
+        Note over DB: Cluster remains with deleted_time set, Reconciled=False
+        Note over CLAdapter: Sentinel will re-trigger on next poll cycle
+        CLAdapter->>API: POST /clusters/{id}/adapter_statuses (Finalized=True)
+        Note over API: Retry hard-delete logic
+    end
+```
+
+**Why atomic transactions prevent partial deletes:** The `adapter_status` update and the `DELETE` statement execute in the same database transaction. If the `DELETE` fails, the entire transaction rolls back — the status update is never committed, `Reconciled` remains `False`, and Sentinel will re-trigger the adapter to retry.
+
+</details>
+
 **Bottom-up ordering via Reconciled aggregation:**
 
 - When the API receives `POST /clusters/{id}/adapter_statuses` with `Finalized=True`, it stores the adapter conditions as reported and computes `Reconciled`
@@ -70,13 +103,17 @@ sequenceDiagram
 - If nodepools still exist: `Reconciled` stays `False` even though all cluster adapters report `Finalized=True`
 - Sentinel sees `Reconciled=False`, re-triggers the event, and cluster adapters report `Finalized=True` again idempotently
 - Once all nodepools are hard-deleted: next status update computes `Reconciled=True` and hard-deletes the cluster
-- `ON DELETE RESTRICT` provides database-level safety
+- `ON DELETE RESTRICT` on the nodepool→cluster foreign key provides database-level safety, preventing cluster row deletion while nodepool rows still reference it
 
 ## Consequences
 
 **Gains:** Small implementation scope (few lines in API status path); atomic transaction prevents partial-deletes; API check prevents race condition by verifying nodepools are gone; clean database (critical at 500+ nodepools); no new infrastructure; natural retry via Sentinel; consistent with Kubernetes finalizer semantics.
 
-**Trade-offs:** No `GET` after hard-delete; investigation requires log tooling; premature `Finalized=True` from adapter bug = permanent data loss. Future event streaming for audits can be added without changing this mechanism.
+**Trade-offs:** No `GET` after hard-delete; investigation requires log tooling; premature `Finalized=True` from adapter bug = permanent data loss (mitigated by Health guard in post-processing that prevents `Finalized=True` when executor didn't complete successfully, and adapters reporting `Finalized=False` with reason `AdapterUnhealthy` when cleanup cannot be confirmed — see [Adapter Deletion Flow Design](../components/adapter/framework/adapter-deletion-flow-design.md#deletion-error-reporting-11)). Future event streaming for audits can be added without changing this mechanism.
+
+**Failure handling:** If the `DELETE` SQL statement fails (database constraint violation, connection loss, disk full), the entire transaction — including the `adapter_status` update that triggered the hard-delete check — rolls back. The resource remains in the database with `deleted_time` set and `Reconciled=False`. Sentinel will re-trigger the event on the next reconciliation cycle, and the adapter will re-report status, retrying the hard-delete logic.
+
+**Adapter re-reporting:** For large clusters (500+ nodepools), the cluster adapter will repeatedly report `Finalized=True` while waiting for nodepool cleanup to complete. Each report triggers the hard-delete check, sees nodepools still exist, and leaves `Reconciled=False`. This generates adapter status updates proportional to Sentinel's polling frequency × nodepool cleanup duration. This behavior is intentional and acceptable for the initial implementation; optimization deferred to future work.
 
 ## Alternatives Considered
 
