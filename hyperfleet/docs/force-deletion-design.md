@@ -1,0 +1,176 @@
+---
+Status: Draft
+Owner: HyperFleet Team
+Last Updated: 2026-04-28
+---
+
+# Force Deletion Design
+
+**Jira**: [HYPERFLEET-895](https://redhat.atlassian.net/browse/HYPERFLEET-895)
+
+**Related**:
+- [Adapter Deletion Flow Design](../components/adapter/framework/adapter-deletion-flow-design.md)
+- [Hard Delete Design](../components/api-service/hard-delete-design.md)
+
+---
+
+## Table of Contents
+
+- [Problem Statement](#problem-statement)
+- [API Contract for Force Delete](#api-contract-for-force-delete)
+- [Database Impact](#database-impact)
+- [Cascade Semantics for Resource and Subresource Deletion](#cascade-semantics-for-resource-and-subresource-deletion)
+- [Interaction with Normal Delete Flow](#interaction-with-normal-delete-flow)
+- [Timeout and Stuck Detection Ownership](#timeout-and-stuck-detection-ownership)
+- [Audit Logging Approach](#audit-logging-approach)
+- [Trade-offs](#trade-offs)
+- [Alternatives Considered](#alternatives-considered)
+
+---
+
+## Problem Statement
+
+The existing deletion flow ([Adapter Deletion Flow Design](../components/adapter/framework/adapter-deletion-flow-design.md)) relies on all adapters confirming cleanup (`Finalized=True`) before the API hard-deletes records. If an adapter is stuck, unreachable, or permanently unable to clean up its resources, the resource remains in `Finalizing` state indefinitely with no recovery path.
+
+Force deletion must provide an escape hatch that allows operators to hard-delete resource and subresource records from the database when the normal deletion flow is blocked.
+
+---
+
+## API Contract for Force Delete
+
+```mermaid
+sequenceDiagram
+    participant Admin
+    participant API
+    participant DB
+    participant Adapter
+
+    Admin->>API: POST /admin/clusters/{id}/force-delete
+    API->>API: Validate resource in Finalizing
+    API->>API: Log audit entry
+    API->>DB: Hard-delete records (single transaction)
+
+    alt Delete succeeds
+        API-->>Admin: 204 No Content
+        Adapter->>API: GET /clusters/{id}
+        API-->>Adapter: 404 Not Found
+    else Delete fails
+        API->>API: Log failure
+        API-->>Admin: 500 Internal Server Error
+    end
+```
+
+Force delete is a synchronous API action. The API immediately hard-deletes records from the database, bypassing the `Reconciled=True` gate.
+
+`POST /admin/clusters/{id}/force-delete`
+`POST /admin/clusters/{cluster_id}/nodepools/{nodepool_id}/force-delete`
+
+Force delete is a privileged operation exposed under the `/admin/` path prefix, a new pattern outside the standard `/api/hyperfleet/{version}/` convention. The `/admin/` prefix is used because force delete is an operational escape hatch, not a versioned resource API. The HyperFleet API is not directly customer-facing. It sits behind partner APIs (GCP, AWS/ROSA) that provide native authorization. Partners do not expose admin endpoints in their public API.
+
+The resource must already be in `Finalizing` state (`deleted_time` set), meaning a normal `DELETE` was issued first. Force delete is an escalation for stuck deletions, not a replacement for normal delete. The API rejects force delete on resources that are not in `Finalizing`.
+
+Response codes:
+
+- `204 No Content`: force delete succeeded, records removed
+- `404 Not Found`: resource does not exist (already deleted or invalid ID)
+- `409 Conflict`: resource is not in `Finalizing` state
+- `500 Internal Server Error`: delete failed due to unexpected server error
+
+All error responses follow the [HyperFleet Error Model](../standards/error-model.md) (RFC 9457 Problem Details format).
+
+---
+
+## Database Impact
+
+No new columns or tables. Force delete removes the same records as normal hard-delete (adapter statuses, subresources, then the resource) in a single transaction without waiting for `Reconciled=True`. Despite bypassing the Reconciled gate, the API code enforces the same bottom-up deletion ordering within the transaction. `ON DELETE RESTRICT` on foreign keys acts as a safety net, not the primary enforcement mechanism (see [Hard Delete Design](../components/api-service/hard-delete-design.md)).
+
+---
+
+## Cascade Semantics for Resource and Subresource Deletion
+
+Force-deleting a resource also removes all its subresources in the same transaction, using bottom-up ordering (e.g., force-deleting a Cluster removes all NodePool records before the Cluster itself).
+
+Force delete also works on individual subresources. For example, a single stuck NodePool can be force-deleted without affecting the Cluster or other NodePools.
+
+---
+
+## Interaction with Normal Delete Flow
+
+Force delete requires no changes to Sentinel's polling or event publishing. Once records are removed from the DB, Sentinel has nothing to poll. Sentinel does gain new responsibilities for stuck detection (see [Timeout and Stuck Detection Ownership](#timeout-and-stuck-detection-ownership)).
+
+Adapters may receive events for resources that have been force-deleted. When an adapter tries to GET the resource as a precondition or POST its status back to the API, the API returns 404. Adapters must handle this gracefully (log and move on, do not retry).
+
+---
+
+## Timeout and Stuck Detection Ownership
+
+Force delete is always manually triggered by an admin. There is no automatic escalation from normal delete to force delete.
+
+Sentinel owns stuck detection. It exposes two metrics aggregated by `resource_type` (cluster, nodepool) to keep label cardinality low:
+
+- `hyperfleet_sentinel_finalizing_resources` (gauge): count of resources currently in `Finalizing` state
+- `hyperfleet_sentinel_finalizing_duration_seconds` (histogram): distribution of how long resources have been in `Finalizing`, computed from `deleted_time`
+
+These metrics enable Prometheus alert rules (e.g., alert when any resource has been finalizing longer than a threshold) and dashboards. To identify specific stuck resources, operators query the API via TSL filtering on `deleted_time`.
+
+---
+
+## Audit Logging Approach
+
+The API logs a structured log entry before hard-deleting records, following the [Logging Specification](../standards/logging-specification.md). The log entry includes the caller identity, resource ID, resource type, timestamp, subresources being removed, and adapter statuses at time of force delete. If the delete fails, the API logs the failure with the error.
+
+---
+
+## Trade-offs
+
+### What We Gain
+
+- Recovery path for resources stuck in `Finalizing` indefinitely
+
+### What We Lose / What Gets Harder
+
+- K8s resources managed by adapters may be orphaned if adapters did not finish cleanup before force delete
+
+### Acceptable Because
+
+- Force delete is a privileged, manual operation. The admin accepts the consequences when they invoke it.
+- Orphaned K8s resources can be cleaned up manually or via a future garbage collector.
+
+---
+
+## Alternatives Considered
+
+### DeletionStuck Condition via Sentinel
+
+**What**:
+- When a resource exceeds a configurable deletion timeout, Sentinel POSTs a `DeletionStuck=True` condition to the resource's `status.conditions` via the API. Operators search for stuck resources via TSL: `GET /clusters?search=status.conditions.DeletionStuck='True'`.
+
+**Why Rejected**:
+- Sentinel is read-only by design. It polls the API and publishes CloudEvents. Adding write capabilities changes Sentinel from observer to actor, violating single-responsibility (see [ADR 0012](../adrs/0012-hard-delete-mechanism-after-adapter-reconciliation.md)).
+- The Prometheus gauge metric and TSL filtering on `deleted_time` provide equivalent operator visibility without changing Sentinel's role.
+
+### Per-Adapter Skip Annotations
+
+**What**:
+- An annotation (`hyperfleet.io/skip-cleanup-ADAPTER_NAME`) on a resource tells the system to skip a specific adapter during the normal deletion flow, allowing the remaining adapters to finalize while bypassing the stuck one.
+
+**Why Rejected**:
+- Force delete already covers the "adapter is stuck" scenario. The skip flag adds a middle ground (skip one, wait for the rest) that touches API, Sentinel, and the adapter framework for a narrow case.
+- If the healthy adapters are running, they handle 404s gracefully when a force-deleted resource disappears. The practical difference between letting them finish cleanup and force-deleting while they no-op on 404 is minimal.
+- Keeping deletion binary (normal waits for all, force bypasses all) is simpler to reason about and implement.
+
+### Async Force Delete
+
+**What**:
+- Admin calls the delete endpoint with `?force=true`.
+- Instead of immediately hard-deleting, the API sets a `force_delete` signal on the resource in the DB.
+- Sentinel polls, detects the change, publishes an event.
+- Adapters receive the event, skip or attempt cleanup, report `Finalized=True` back to the API.
+- API sees `Reconciled=True` and hard-deletes the records.
+- A variation adds a timeout: if adapters do not respond, a background job in the API hard-deletes the records anyway.
+
+**Why Rejected**:
+- If adapters are reachable, the async path round-trips through Sentinel and adapters only to report `Finalized=True`. The records get hard-deleted either way.
+- If adapters are unreachable, the async path is blocked for the same reason as normal deletion.
+- The timeout variation requires code changes in all three components (API, Sentinel, adapters) instead of just the API, a background job in the API to monitor expired timeouts, and still needs sync hard-delete as a fallback.
+
