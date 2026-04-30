@@ -109,12 +109,11 @@ Adapters may receive events for resources that have been force-deleted. When an 
 
 Force delete is always manually triggered by an admin. There is no automatic escalation from normal delete to force delete.
 
-Sentinel owns stuck detection. It exposes two metrics aggregated by `resource_type` (cluster, nodepool) to keep label cardinality low:
+Sentinel owns stuck detection. It exposes a gauge metric aggregated by `resource_type` (cluster, nodepool) to keep label cardinality low:
 
 - `hyperfleet_sentinel_finalizing_resources` (gauge): count of resources currently in `Finalizing` state
-- `hyperfleet_sentinel_finalizing_duration_seconds` (histogram): distribution of how long resources have been in `Finalizing`, computed from `deleted_time`
 
-These metrics enable Prometheus alert rules (e.g., alert when any resource has been finalizing longer than a threshold) and dashboards. To identify specific stuck resources, operators query the API via TSL filtering on `deleted_time`.
+A Prometheus alert rule on this gauge (e.g., `finalizing_resources > 0 for 30m`) detects stuck deletions. To identify specific stuck resources, operators query the API via TSL filtering on `deleted_time`.
 
 ---
 
