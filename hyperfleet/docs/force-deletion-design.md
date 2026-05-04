@@ -1,7 +1,7 @@
 ---
 Status: Draft
 Owner: HyperFleet Team
-Last Updated: 2026-05-01
+Last Updated: 2026-05-04
 ---
 
 # Force Deletion Design
@@ -92,15 +92,15 @@ No new columns or tables. Force delete removes the same records as normal hard-d
 
 ## Cascade Semantics for Resource and Subresource Deletion
 
-Force-deleting a resource also removes all its subresources in the same transaction, using bottom-up ordering (e.g., force-deleting a Cluster removes all NodePool records before the Cluster itself).
+Force-deleting a resource also removes all its subresources and their adapter statuses in the same transaction, using bottom-up ordering (e.g., force-deleting a Cluster removes adapter statuses and NodePool records before the Cluster itself).
 
-Force delete also works on individual subresources. For example, a single stuck NodePool can be force-deleted without affecting the Cluster or other NodePools.
+Force delete also works on individual subresources. For example, a single stuck NodePool and its adapter statuses can be force-deleted without affecting the Cluster or other NodePools.
 
 ---
 
 ## Interaction with Normal Delete Flow
 
-Force delete requires no changes to Sentinel's polling or event publishing. Once records are removed from the DB, Sentinel has nothing to poll. Sentinel does gain new responsibilities for stuck detection (see [Timeout and Stuck Detection Ownership](#timeout-and-stuck-detection-ownership)).
+Force delete requires no changes to Sentinel's polling or event publishing. Once records are removed from the DB, Sentinel has nothing to poll.
 
 Adapters may receive events for resources that have been force-deleted. When an adapter tries to GET the resource as a precondition or POST its status back to the API, the API returns 404. Adapters must handle this gracefully (log and move on, do not retry).
 
@@ -110,11 +110,7 @@ Adapters may receive events for resources that have been force-deleted. When an 
 
 Force delete is always manually triggered by an admin. There is no automatic escalation from normal delete to force delete.
 
-Sentinel owns stuck detection. It exposes a gauge metric aggregated by `resource_type` (cluster, nodepool) to keep label cardinality low:
-
-- `hyperfleet_sentinel_finalizing_resources` (gauge): count of resources currently in `Finalizing` state
-
-A Prometheus alert rule on this gauge (e.g., `finalizing_resources > 0 for 30m`) detects stuck deletions. To identify specific stuck resources, operators query the API via TSL (Tag Search Language) filtering on `deleted_time`.
+The API owns stuck detection via deletion observability metrics and alerts. To identify specific stuck resources, operators query the API via TSL filtering on `deleted_time`.
 
 ---
 
@@ -155,7 +151,7 @@ The force-delete endpoint requires a `reason` in the request body. The reason is
 
 **Why Rejected**:
 - Sentinel is read-only by design. It polls the API and publishes CloudEvents. Adding write capabilities changes Sentinel from observer to actor, violating single-responsibility (see [ADR 0012](../adrs/0012-hard-delete-mechanism-after-adapter-reconciliation.md)).
-- The Prometheus gauge metric and TSL filtering on `deleted_time` provide equivalent operator visibility without changing Sentinel's role.
+- The API-owned deletion observability metrics and TSL filtering on `deleted_time` provide equivalent operator visibility without changing Sentinel's role.
 
 ### Per-Adapter Skip Annotations
 

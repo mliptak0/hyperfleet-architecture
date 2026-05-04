@@ -14,19 +14,19 @@ Last Updated: 2026-05-01
 
 ## Context
 
-Force delete is an admin escape hatch to hard-delete resources stuck in `Finalizing` state. This ADR records the decision on scope. Force-delete removes database records only and does not attempt infrastructure cleanup.
+Force delete is an admin escape hatch to hard-delete resources stuck in "Finalizing" state. This ADR records the decision on scope. Force-delete removes database records only and does not attempt infrastructure cleanup.
 
 ---
 
 ## Decision
 
-Force delete removes records from the HyperFleet database only. Infrastructure managed by adapters (K8s clusters, nodepools, cloud resources) may be orphaned.
+Force delete removes records from the HyperFleet database only. Infrastructure managed by adapters is left untouched.
 
 ---
 
 ## Consequences
 
-**Gains:** Unblocks resources stuck in `Finalizing` indefinitely. Simple implementation scoped to the API with no changes to Sentinel or adapters.
+**Gains:** Unblocks resources stuck in "Finalizing" indefinitely. Simple implementation scoped to the API with no changes to Sentinel or adapters.
 
 **Trade-offs:** K8s resources managed by adapters may be orphaned if adapters did not finish cleanup before force delete. See [Force Deletion Design](../docs/force-deletion-design.md#trade-offs) for full analysis.
 
