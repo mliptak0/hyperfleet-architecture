@@ -197,11 +197,17 @@ All core services use testcontainers-go for integration testing and golangci-lin
 
 | Field | Value |
 |-------|-------|
-| **Reference** | [hyperfleet-release-process.md](https://github.com/openshift-hyperfleet/architecture/blob/main/hyperfleet/docs/hyperfleet-release-process.md) |
+| **Release Process** | [hyperfleet-release-process.md](./docs/release/hyperfleet-release-process.md) |
+| **Pipeline Design** | [konflux-release-pipeline-design.md](./docs/release/konflux-release-pipeline-design.md) |
+| **ADR** | [0013 — Konflux for Container Image Build and Release](./adrs/0013-konflux-build-and-release.md) |
 
-### 6.1 Prow CI
+### 6.1 Konflux (Build and Release)
 
-Primary CI system for core services. Presubmit and postsubmit jobs across all core repositories covering unit tests, integration tests, linting, and Helm chart validation. Job definitions are externally managed. Dedicated Prow CI cluster provisioned on GCP.
+Container images are built and released via Konflux on the `stone-prd-rh01` cluster. PaC tag-triggered pipelines build images, Tekton Chains signs provenance, and the `rh-push-to-external-registry` pipeline publishes to `quay.io/redhat-services-prod/hyperfleet/`. See [Konflux Release Pipeline Design](./docs/release/konflux-release-pipeline-design.md) for full architecture.
+
+### 6.2 Prow CI
+
+CI system for PR validation and E2E testing. Presubmit and postsubmit jobs across all core repositories covering unit tests, integration tests, linting, and Helm chart validation. Job definitions are externally managed. Dedicated Prow CI cluster provisioned on GCP.
 
 ---
 
