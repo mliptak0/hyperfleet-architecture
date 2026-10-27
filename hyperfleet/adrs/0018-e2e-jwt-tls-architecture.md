@@ -105,7 +105,7 @@ The runner reads `auth_mode` (default `EDGE+API`, overridden by `AUTH_MODE`); it
 - ✅ In `EDGE+API`, the API receives an Authorino Wristband instead of the client token
 - ✅ In `EDGE+API`, caller identity comes from the Wristband `sub`
 - ✅ Audit fields populated correctly (`created_by`, `updated_by`, `deleted_by`) using the validated caller identity - see [v1.0.0 Upgrade Guide §1.4](../docs/release/v0.2.0-to-v1.0.0-upgrade-guide.md#14-jwt-identity-claim-for-audit-fields) for JWT identity claim mapping
-- ✅ 401/403 responses for invalid/missing tokens returned by the gateway before reaching the API
+- ✅ In `EDGE` and `EDGE+API`, 401/403 responses for invalid/missing tokens are returned by the gateway before reaching the API. In `API`, the API returns them.
 - ✅ Token expiration configuration (TokenRequest lifetime)
 - ❌ TLS termination (infrastructure responsibility, out of scope)
 - ❌ Certificate validation (infrastructure responsibility, out of scope)
@@ -118,7 +118,7 @@ The runner reads `auth_mode` (default `EDGE+API`, overridden by `AUTH_MODE`); it
 - ✅ **Kubernetes-native** — Uses the built-in TokenRequest API
 - ✅ **Real JWT validation** — Tests validate actual Kubernetes-signed tokens, not mocks
 - ✅ **Ephemeral tokens** — Generated on demand, not stored in cluster
-- ✅ **Minimal infrastructure** — No pods for token extraction; Envoy and Authorino are required as the auth gateway. The machine-token path needs no OIDC server; the e2e mock issuer serves only the human provider
+- ✅ **Minimal infrastructure** — No pods for token extraction; in `EDGE` and `EDGE+API`, Envoy and Authorino are required as the auth gateway. The machine-token path needs no OIDC server; the e2e mock issuer serves only the human provider
 - ✅ **Cloud-agnostic** — Works in any Kubernetes cluster with the TokenRequest API (GKE, EKS, AKS, kind)
 - ✅ **Fast** — Token generation in ~100ms vs ~5-10s for Job-based approaches
 
