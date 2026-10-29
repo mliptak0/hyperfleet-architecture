@@ -12,12 +12,11 @@ The E2E test framework ([hyperfleet-e2e](https://gitlab.cee.redhat.com/service/h
 
 **Key Decision Point from Office Hours (2026-07-01)**: The team agreed to define a **cloud-agnostic contract** for TLS and JWT handling to avoid relying on specific cloud provider behaviors (GCP, AWS, Azure, OCI).
 
-Production architecture will use infrastructure-level TLS termination:
+Today Envoy receives plain HTTP on port 8000, and no component in front of it terminates TLS. The target architecture adds TLS termination at the ingress / cloud load balancer. That hop is planned and not yet implemented:
 
 ```mermaid
 graph TD
-    A[Client HTTPS] --> B[Ingress / Cloud Load Balancer]
-    B -->|TLS termination| E[Envoy]
+    A[Client] -->|HTTP| E[Envoy]
     E -->|ext_authz over internal TLS| F[Authorino]
     F -->|ServiceAccount scheme: TokenReview| G[Kubernetes API]
     F -->|Bearer scheme: OIDC JWT validation| I[OIDC Issuer]
@@ -26,7 +25,6 @@ graph TD
     C -.->|Wristband JWKS fetch over TLS| F
     C -->|validates Wristband| C
 
-    style B fill:#f9f,stroke:#333,stroke-width:2px
     style E fill:#ffd,stroke:#333,stroke-width:2px
     style F fill:#ffd,stroke:#333,stroke-width:2px
     style C fill:#bbf,stroke:#333,stroke-width:2px
@@ -34,7 +32,7 @@ graph TD
 
 This means:
 
-- Infrastructure layer (Ingress / Cloud Load Balancer) handles TLS termination
+- Planned: the ingress / cloud load balancer terminates TLS and forwards HTTP to Envoy. Today clients send HTTP directly to Envoy
 - Envoy receives HTTP, then uses internal TLS to Authorino and the API (namespace-local cert-manager CA)
 - The Envoy + Authorino gateway validates JWT tokens for authentication (see [ADR-0020](0020-envoy-authorino-api-gateway.md))
 
@@ -42,7 +40,7 @@ This means:
 
 **E2E tests will use Kubernetes service account tokens for authentication:**
 
-1. **No application-level TLS testing** — Infrastructure handles TLS termination; E2E tests connect via HTTP to the Envoy gateway (matching production pod behavior)
+1. **No application-level TLS testing** — E2E tests connect via HTTP to the Envoy gateway, the protocol Envoy receives today; ingress TLS termination is planned and out of scope
 2. **Use Kubernetes Service Account Tokens for JWT authentication** — Ginkgo tests run **outside the cluster** (developer laptops / CI runners) and request service account tokens through the Kubernetes TokenRequest API with `audience: hyperfleet-api`
 3. **Test the gateway + API authentication contract** — E2E tests route through the Envoy gateway and send the scheme their deployment's `AUTH_MODE` requires; `AUTH_MODE` is the hyperfleet-infra setting that selects where authentication runs ([ADR-0020](0020-envoy-authorino-api-gateway.md) defines the modes). TLS/certificate handling is out of scope.
 
@@ -82,8 +80,8 @@ sequenceDiagram
         Authorino->>OIDC: Validate JWT against JWKS endpoint
         OIDC->>Authorino: Token valid
     end
-    Authorino->>Envoy: Allow; Wristband in dynamic metadata
-    Envoy->>API: TLS; Authorization replaced with Bearer Wristband
+    Authorino->>Envoy: Allow, Wristband in dynamic metadata
+    Envoy->>API: TLS, Authorization replaced with Bearer Wristband
     API->>E2E: Return clusters (audit fields populated)
     E2E->>E2E: Ginkgo assertions verify response
 ```
@@ -107,7 +105,7 @@ The runner reads `auth_mode` (default `EDGE+API`, overridden by `AUTH_MODE`); it
 - ✅ Audit fields populated correctly (`created_by`, `updated_by`, `deleted_by`) using the validated caller identity - see [v1.0.0 Upgrade Guide §1.4](../docs/release/v0.2.0-to-v1.0.0-upgrade-guide.md#14-jwt-identity-claim-for-audit-fields) for JWT identity claim mapping
 - ✅ In `EDGE` and `EDGE+API`, 401/403 responses for invalid/missing tokens are returned by the gateway before reaching the API. In `API`, the API returns them.
 - ✅ Token expiration configuration (TokenRequest lifetime)
-- ❌ TLS termination (infrastructure responsibility, out of scope)
+- ❌ Ingress TLS termination (planned, not deployed; out of scope)
 - ❌ Certificate validation (infrastructure responsibility, out of scope)
 - ❌ External user OIDC authentication, header stripping, and tenant isolation (hyperfleet-infra gateway E2E suite)
 
@@ -126,7 +124,7 @@ The runner reads `auth_mode` (default `EDGE+API`, overridden by `AUTH_MODE`); it
 
 - ⚠️ **Service-to-service auth only** — Tests validate service account authentication, not external user OIDC flows
 - ⚠️ **Service account identity format** — Audit fields show `system:serviceaccount:namespace:sa-name` instead of user emails
-- ⚠️ **No TLS testing** — Infrastructure-level TLS termination is out of scope for E2E tests
+- ⚠️ **No TLS testing** — Ingress TLS termination is out of scope for E2E tests and not deployed yet
 - ⚠️ **Mode coupling** — E2E `AUTH_MODE` must match the deployed mode; otherwise the wrong scheme fails authentication
 
 ## Alternatives Considered
@@ -136,7 +134,7 @@ The runner reads `auth_mode` (default `EDGE+API`, overridden by `AUTH_MODE`); it
 | **Job-based token extraction** | ❌ Requires deploying Job pod, waiting ~5-10s, writing to annotation. A direct TokenRequest call achieves the same result in ~100ms with zero resources. |
 | **Mock OIDC server for machine tokens** | ❌ Unnecessary infrastructure. Kubernetes provides native JWT authentication via service account tokens. |
 | **GCP Identity Tokens** | ❌ Violates cloud-agnostic principle. Cannot run locally or in AWS/Azure CI/CD. |
-| **Application-level TLS** | ❌ Production uses infrastructure-level TLS termination. Would test non-production behavior. |
+| **Application-level TLS** | ❌ Envoy receives HTTP today; planned ingress TLS termination sits outside the gateway. Would test behavior not deployed. |
 | **Skip JWT testing** | ❌ Leaves gap in authentication contract testing. Audit fields wouldn't be validated. |
 | **External OIDC (Keycloak, Dex)** | ❌ Adds operational complexity. Service account tokens are simpler and Kubernetes-native. |
 
